@@ -1,6 +1,8 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router'
+import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ConversationProvider } from '@/contexts/conversation-context'
 
 export const Route = createRootRoute({
   component: Root,
@@ -9,11 +11,14 @@ export const Route = createRootRoute({
 function Root() {
   return (
     <TooltipProvider>
-      <SidebarProvider>
-        <SidebarInset>
-          <Outlet />
-        </SidebarInset>
-      </SidebarProvider>
+      <ConversationProvider>
+        <SidebarProvider>
+          <AppSidebar />
+          <SidebarInset>
+            <Outlet />
+          </SidebarInset>
+        </SidebarProvider>
+      </ConversationProvider>
     </TooltipProvider>
   )
 }

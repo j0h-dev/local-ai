@@ -3,6 +3,7 @@ import { useState } from 'react'
 import {
   Conversation,
   ConversationContent,
+  ConversationEmptyState,
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
 import {
@@ -24,6 +25,7 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { ChatMessageList } from '@/components/chat-message-list'
 import { ModelManagerDialog } from '@/components/model-manager-dialog'
+import { useConversations } from '@/contexts/conversation-context'
 import { useChatSession } from '@/hooks/use-chat-session'
 
 export const Route = createFileRoute('/')({
@@ -32,6 +34,8 @@ export const Route = createFileRoute('/')({
 
 function App() {
   const [text, setText] = useState<string>('')
+  const { activeConversationId, activeConversation, saveConversation } =
+    useConversations()
   const {
     model,
     setModel,
@@ -42,17 +46,29 @@ function App() {
     messageModels,
     handleSubmit,
     handleRegenerate,
-  } = useChatSession({ onTextReset: () => setText('') })
+  } = useChatSession({
+    onTextReset: () => setText(''),
+    activeConversationId,
+    activeConversation,
+    onSave: saveConversation,
+  })
 
   return (
     <div className="w-full h-full grow flex flex-col p-8">
       <Conversation>
         <ConversationContent>
-          <ChatMessageList
-            messages={messages}
-            messageModels={messageModels}
-            onRegenerate={handleRegenerate}
-          />
+          {messages.length === 0 ? (
+            <ConversationEmptyState
+              title="Start a conversation"
+              description="Select a model and type a message to begin"
+            />
+          ) : (
+            <ChatMessageList
+              messages={messages}
+              messageModels={messageModels}
+              onRegenerate={handleRegenerate}
+            />
+          )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
