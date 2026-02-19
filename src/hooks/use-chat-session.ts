@@ -11,6 +11,7 @@ type UseChatSessionOptions = {
   activeConversationId: string | null
   activeConversation: Conversation | null
   onSave: (conversation: Conversation) => void
+  onCreateNew: () => string
 }
 
 export function useChatSession({
@@ -18,15 +19,24 @@ export function useChatSession({
   activeConversationId,
   activeConversation,
   onSave,
+  onCreateNew,
 }: UseChatSessionOptions) {
   const [model, setModel] = useState<string>('')
   const [messageModels, setMessageModels] = useState<Record<string, string>>({})
   const pendingModelRef = useRef<string>('')
   const messageModelsRef = useRef<Record<string, string>>({})
+  // When there is no active conversation at submit time, we create one and
+  // store its id here so useChat is keyed to it before sendMessage is called.
+  const [pendingNewId, setPendingNewId] = useState<string | null>(null)
+  const pendingMessageRef = useRef<PromptInputMessage | null>(null)
   const activeConversationRef = useRef<Conversation | null>(activeConversation)
   activeConversationRef.current = activeConversation
   const { data: ollamaModels = [], isLoading: modelsLoading } =
     useOllamaModels()
+
+  // The effective id to pass to useChat: prefer the real active id, fall back
+  // to the pending new id so the chat instance is keyed correctly before send.
+  const effectiveChatId = activeConversationId ?? pendingNewId ?? undefined
 
   useEffect(() => {
     if (ollamaModels.length > 0 && !model) {
@@ -51,20 +61,20 @@ export function useChatSession({
   }, [activeConversationId])
 
   const { messages, sendMessage, status, regenerate } = useChat({
-    id: activeConversationId ?? undefined,
+    id: effectiveChatId,
     messages: activeConversation?.messages,
     transport: new LocalChatTransport(),
     onError: (error: Error) => {
       console.error(error)
     },
     onFinish: ({ messages: finishedMessages, isAbort }) => {
-      if (isAbort || !activeConversationId) return
+      if (isAbort || !effectiveChatId) return
       const lastMsg = finishedMessages[finishedMessages.length - 1]
       const finalMessageModels = lastMsg
         ? { ...messageModelsRef.current, [lastMsg.id]: pendingModelRef.current }
         : messageModelsRef.current
       const conversation: Conversation = {
-        id: activeConversationId,
+        id: effectiveChatId,
         title: deriveTitle(finishedMessages),
         createdAt: activeConversation?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
@@ -73,8 +83,27 @@ export function useChatSession({
         messageModels: finalMessageModels,
       }
       onSave(conversation)
+      setPendingNewId(null)
     },
   })
+
+  // After a new conversation is created and useChat re-renders with the new id,
+  // fire the deferred message.
+  useEffect(() => {
+    if (!pendingNewId || !pendingMessageRef.current) return
+    // Only fire once useChat has picked up the new id (effectiveChatId matches)
+    if (effectiveChatId !== pendingNewId) return
+    const message = pendingMessageRef.current
+    pendingMessageRef.current = null
+    pendingModelRef.current = model
+    sendMessage(
+      {
+        text: message.text || 'Sent with attachments',
+        files: message.files,
+      },
+      { body: { model } },
+    )
+  }, [pendingNewId, effectiveChatId, model, sendMessage])
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
@@ -96,6 +125,15 @@ export function useChatSession({
     const hasText = Boolean(message.text)
     const hasAttachments = Boolean(message.files?.length)
     if (!(hasText || hasAttachments)) {
+      return
+    }
+    if (!activeConversationId) {
+      // No active conversation — create one, stash the message, and let the
+      // effect above fire sendMessage once useChat has the new id.
+      const newId = onCreateNew()
+      pendingMessageRef.current = message
+      setPendingNewId(newId)
+      onTextReset()
       return
     }
     pendingModelRef.current = model

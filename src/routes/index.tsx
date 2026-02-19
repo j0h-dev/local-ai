@@ -34,8 +34,12 @@ export const Route = createFileRoute('/')({
 
 function App() {
   const [text, setText] = useState<string>('')
-  const { activeConversationId, activeConversation, saveConversation } =
-    useConversations()
+  const {
+    activeConversationId,
+    activeConversation,
+    saveConversation,
+    createNew,
+  } = useConversations()
   const {
     model,
     setModel,
@@ -51,6 +55,7 @@ function App() {
     activeConversationId,
     activeConversation,
     onSave: saveConversation,
+    onCreateNew: createNew,
   })
 
   return (
